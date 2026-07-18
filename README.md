@@ -8,7 +8,8 @@ It deliberately **omits** ship, secrets vaults, USB/LUKS recovery, Alley metal, 
 ## Install (local)
 
 ```bash
-cd ~/dev/nk-cli
+git clone <your-fork-or-local-path>
+cd nk-cli
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
@@ -41,14 +42,21 @@ nk-cli reclaim --root "$HOME" --json
 - **No** default paths under secret vaults or credential stores  
 - **No** production deploy / DNS / cloud promote verbs  
 - **No** LUKS, wipe, or privileged USB tooling  
-- **No** remote shell brokers / PTY relays  
-- Portal doctor refuses manifests that embed secrets or raw IPs  
+- **No** remote shell brokers / PTY relays / Tailscale control  
+- Portal doctor (public v1): localhost listeners only; rejects secrets, IPs, mesh/SSH fields  
+- Full pre-publish audit: [docs/PRE_PUBLISH_AUDIT.md](docs/PRE_PUBLISH_AUDIT.md)
 
 ## Provenance
 
 Extracted from NANOKAT monorepo patterns after inventory job `c40b1b98ac5c` (2026-07-18).  
-Private control-plane remains in the monorepo.
+Private control-plane remains in the monorepo host CLI (`nk` / `nanokat`).
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Signature / release (planned)
+
+- **Git:** SSH-signed annotated tags  
+- **Artifacts:** GitHub/Sigstore attestations on release  
+- Not monorepo receipt keys / vault material
