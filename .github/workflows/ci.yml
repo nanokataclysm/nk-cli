@@ -26,7 +26,8 @@ jobs:
       - name: CLI smoke
         run: |
           nk-cli --help
-          nk-cli portal-doctor --manifest examples/portal-hosts.example.json
+          # The example intentionally checks an offline localhost listener.
+          nk-cli portal-doctor --manifest examples/portal-hosts.example.json || test "$?" -eq 1
           nk-cli reclaim --root . --depth 2 --json | head -c 200
       - name: Stdlib-only guard
         run: |

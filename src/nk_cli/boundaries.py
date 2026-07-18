@@ -44,17 +44,27 @@ def forbidden_tracked(paths: list[str]) -> list[str]:
     return sorted(set(bad))
 
 
-def validate_manifest(repo: Path, manifest: dict, tracked: list[str]) -> list[str]:
+def validate_manifest(repo: Path, manifest: object, tracked: list[str]) -> list[str]:
     errors: list[str] = []
+    if not isinstance(manifest, dict):
+        return ["manifest must be an object"]
+
     if manifest.get("version") not in SUPPORTED_VERSIONS:
         errors.append("unsupported manifest version")
+
+    root_files = manifest.get("root_files")
+    if not isinstance(root_files, list) or not all(
+        isinstance(path, str) for path in root_files
+    ):
+        errors.append("root_files must be a list of filenames")
+        root_files = []
+
     units = manifest.get("units")
     if not isinstance(units, list):
         return errors + ["units must be a list"]
 
-    unit_paths = [unit.get("path") for unit in units if isinstance(unit, dict)]
-    if len(unit_paths) != len(set(unit_paths)):
-        errors.append("unit paths must be unique")
+    unit_paths: list[str] = []
+    seen_paths: set[str] = set()
     for unit in units:
         if not isinstance(unit, dict):
             errors.append("every unit must be an object")
@@ -68,6 +78,11 @@ def validate_manifest(repo: Path, manifest: dict, tracked: list[str]) -> list[st
         ):
             errors.append(f"invalid unit path: {path!r}")
             continue
+        if path in seen_paths:
+            errors.append("unit paths must be unique")
+        else:
+            seen_paths.add(path)
+            unit_paths.append(path)
         if not (repo / path).exists():
             errors.append(f"manifest path does not exist: {path}")
         if (
@@ -82,7 +97,7 @@ def validate_manifest(repo: Path, manifest: dict, tracked: list[str]) -> list[st
         for path in unit_paths
         if isinstance(path, str) and path
     }
-    allowed_files = set(manifest.get("root_files", []))
+    allowed_files = set(root_files)
     for value in tracked:
         parts = PurePosixPath(value).parts
         if len(parts) == 1:
@@ -104,9 +119,20 @@ def validate_manifest(repo: Path, manifest: dict, tracked: list[str]) -> list[st
 
 def run_boundaries(repo: Path, manifest_path: Path) -> tuple[int, list[str]]:
     repo = repo.resolve()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    errors = validate_manifest(repo, manifest, tracked_files(repo))
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return 2, ["manifest is not valid JSON"]
+    except (OSError, UnicodeDecodeError):
+        return 2, ["manifest cannot be read"]
+
+    try:
+        tracked = tracked_files(repo)
+    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError):
+        return 2, ["repository tracked files cannot be read"]
+
+    errors = validate_manifest(repo, manifest, tracked)
     if errors:
         return 1, errors
-    units = manifest.get("units") if isinstance(manifest.get("units"), list) else []
+    units = manifest.get("units") if isinstance(manifest, dict) else []
     return 0, [f"repository-boundaries: clean ({len(units)} units)"]

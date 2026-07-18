@@ -1,7 +1,8 @@
+import tempfile
 import unittest
 from pathlib import Path
 
-from nk_cli.boundaries import forbidden_tracked, validate_manifest
+from nk_cli.boundaries import forbidden_tracked, run_boundaries, validate_manifest
 
 
 class BoundariesTests(unittest.TestCase):
@@ -40,6 +41,34 @@ class BoundariesTests(unittest.TestCase):
         errors = validate_manifest(Path("/tmp"), manifest, ["README.md"])
         self.assertTrue(any("does not exist" in e for e in errors) or errors == [])
         self.assertFalse(any("unsupported manifest version" in e for e in errors))
+
+    def test_rejects_non_string_unit_path_without_crashing(self) -> None:
+        manifest = {
+            "version": "nk-repository-units/v1",
+            "root_files": ["README.md"],
+            "units": [
+                {"path": [], "kind": "test", "lifecycle": "active", "deploy_root": False},
+            ],
+        }
+        errors = validate_manifest(Path("/"), manifest, ["README.md"])
+        self.assertIn("invalid unit path: []", errors)
+
+    def test_rejects_invalid_root_files_without_crashing(self) -> None:
+        manifest = {
+            "version": "nk-repository-units/v1",
+            "root_files": [["README.md"]],
+            "units": [],
+        }
+        errors = validate_manifest(Path("/"), manifest, ["README.md"])
+        self.assertIn("root_files must be a list of filenames", errors)
+
+    def test_run_rejects_invalid_json_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = Path(directory) / "manifest.json"
+            manifest_path.write_text("{", encoding="utf-8")
+            code, messages = run_boundaries(Path(directory), manifest_path)
+        self.assertEqual(2, code)
+        self.assertEqual(["manifest is not valid JSON"], messages)
 
 
 if __name__ == "__main__":

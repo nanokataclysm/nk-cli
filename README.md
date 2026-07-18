@@ -8,7 +8,7 @@ It deliberately **omits** ship, secrets vaults, USB/LUKS recovery, Alley metal, 
 ## Install (local)
 
 ```bash
-git clone <your-fork-or-local-path>
+git clone https://github.com/nanokataclysm/nk-cli.git
 cd nk-cli
 python3 -m venv .venv
 source .venv/bin/activate
