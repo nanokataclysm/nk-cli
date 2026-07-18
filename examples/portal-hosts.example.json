@@ -1,0 +1,19 @@
+{
+  "version": "nk-portal-hosts/v1",
+  "hosts": [
+    {
+      "id": "local-dev",
+      "role": "workstation",
+      "provider": "local",
+      "recovery": "rebuild-from-backup",
+      "required": true,
+      "listeners": [
+        {
+          "host": "127.0.0.1",
+          "port": 3000,
+          "bind_class": "localhost"
+        }
+      ]
+    }
+  ]
+}

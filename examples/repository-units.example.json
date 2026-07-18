@@ -1,0 +1,29 @@
+{
+  "version": "nk-repository-units/v1",
+  "root_files": [
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+    ".gitignore"
+  ],
+  "units": [
+    {
+      "path": "src",
+      "kind": "library",
+      "lifecycle": "active",
+      "deploy_root": false
+    },
+    {
+      "path": "tests",
+      "kind": "tests",
+      "lifecycle": "active",
+      "deploy_root": false
+    },
+    {
+      "path": "examples",
+      "kind": "examples",
+      "lifecycle": "active",
+      "deploy_root": false
+    }
+  ]
+}
