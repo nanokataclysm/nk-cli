@@ -3,6 +3,7 @@
   "root_files": [
     "README.md",
     "LICENSE",
+    "SECURITY.md",
     "pyproject.toml",
     ".gitignore"
   ],
