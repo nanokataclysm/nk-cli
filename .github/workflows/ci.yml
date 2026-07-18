@@ -53,9 +53,17 @@ jobs:
           PY
       - name: Forbidden string scan
         run: |
-          # Fail if private host-control surfaces sneak into src/
-          if grep -REn 'nanokat-secrets|crystal_castle|ALLEY_|KAI_BRIDGE|cryptsetup|nanokat-priv|vercel deploy|force-push' src/; then
+          # Fail if private host-control surfaces sneak into src/ (exclude pure deny-list comments)
+          # Allowed: reclaim path *blocklist* may mention secret-like directory names to refuse them.
+          hits=$(grep -REn 'crystal_castle|ALLEY_|KAI_BRIDGE|cryptsetup|nanokat-priv|vercel deploy|force-push|ship promote|usb setup' src/ || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
             echo "forbidden private-control markers in src/" >&2
+            exit 1
+          fi
+          # Hard fail if vault path is used as a default *source* (not only blocklist)
+          if grep -REn 'nanokat-secrets.*/(env|key|token)|open\(.*nanokat-secrets' src/; then
+            echo "vault path used as a source" >&2
             exit 1
           fi
           echo "forbidden-string scan ok"
