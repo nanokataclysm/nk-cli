@@ -1,11 +1,18 @@
 # nk-cli
 
-Small **public-safe** assistive utilities inspired by NANOKAT host practices.
+Public-safe command-line utilities for repository hygiene, local diagnostics, and dry-run maintenance workflows.
 
-This is **not** the private host-control CLI (`nk` / `nanokat` in the monorepo).  
-It deliberately **omits** ship, secrets vaults, USB/LUKS recovery, Alley metal, Kai bridges, and PTY relays.
+`nk-cli` is deliberately narrow. It does not expose the private NANOKAT control plane, deployment operations, secret stores, recovery tooling, remote shells, or privileged device management.
 
-## Install (local)
+## Capabilities
+
+| Command | Purpose |
+|---|---|
+| `nk-cli boundaries` | Validate repository-unit boundaries and reject tracked runtime junk |
+| `nk-cli portal-doctor` | Read-only local service health checks from a sanitized manifest |
+| `nk-cli reclaim` | Produce a dry-run disk-reclaim report without deleting files |
+
+## Install for development
 
 ```bash
 git clone https://github.com/nanokataclysm/nk-cli.git
@@ -16,47 +23,39 @@ pip install -e '.[dev]'
 nk-cli --help
 ```
 
-## Commands
-
-| Command | Purpose |
-|---------|---------|
-| `nk-cli boundaries` | Validate a git monorepo unit manifest; reject tracked runtime junk |
-| `nk-cli portal-doctor` | Read-only host/portal health from a local manifest (no logins, no repairs) |
-| `nk-cli reclaim` | **Dry-run** disk reclaim report for common cache paths (never deletes) |
-
-### Examples
+## Examples
 
 ```bash
-# Repository unit boundaries
-nk-cli boundaries --repo /path/to/repo --manifest examples/repository-units.example.json
+# Validate repository boundaries
+nk-cli boundaries \
+  --repo /path/to/repo \
+  --manifest examples/repository-units.example.json
 
-# Portal doctor (safe fields only)
-nk-cli portal-doctor --manifest examples/portal-hosts.example.json
+# Check local service health using safe manifest fields
+nk-cli portal-doctor \
+  --manifest examples/portal-hosts.example.json
 
-# Disk reclaim report only
+# Report reclaimable cache space without deleting anything
 nk-cli reclaim --root "$HOME" --json
 ```
 
-## Security posture
+## Safety model
 
-- **No** default paths under secret vaults or credential stores  
-- **No** production deploy / DNS / cloud promote verbs  
-- **No** LUKS, wipe, or privileged USB tooling  
-- **No** remote shell brokers / PTY relays / Tailscale control  
-- Portal doctor (public v1): localhost listeners only; rejects secrets, IPs, mesh/SSH fields  
-- Full pre-publish audit: [docs/PRE_PUBLISH_AUDIT.md](docs/PRE_PUBLISH_AUDIT.md)
+- No production deployment, DNS, or cloud-promotion commands
+- No secret-vault or credential-store defaults
+- No disk wiping, encrypted-volume management, or privileged USB operations
+- No remote shell brokers, PTY relays, or mesh-network control
+- Localhost-only portal checks with secret, IP, SSH, and mesh fields rejected
+- Destructive maintenance is excluded; reclaim remains report-only
 
-## Provenance
+See [`docs/PRE_PUBLISH_AUDIT.md`](docs/PRE_PUBLISH_AUDIT.md) for the public-surface review.
 
-Extracted from NANOKAT monorepo patterns after inventory job `c40b1b98ac5c` (2026-07-18).  
-Private control-plane remains in the monorepo host CLI (`nk` / `nanokat`).
+## Project status
+
+This repository is an early public extraction of reusable NANOKAT operational patterns. The current focus is keeping the interface small, auditable, testable, and safe to run on a developer workstation.
+
+Issues and focused pull requests are welcome. Please avoid submitting host-specific paths, credentials, network inventories, or private infrastructure details.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
-## Signature / release (planned)
-
-- **Git:** SSH-signed annotated tags  
-- **Artifacts:** GitHub/Sigstore attestations on release  
-- Not monorepo receipt keys / vault material
+MIT — see [`LICENSE`](LICENSE).
