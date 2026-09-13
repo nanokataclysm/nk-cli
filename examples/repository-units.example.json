@@ -8,23 +8,11 @@
     ".gitignore"
   ],
   "units": [
-    {
-      "path": "src",
-      "kind": "library",
-      "lifecycle": "active",
-      "deploy_root": false
-    },
-    {
-      "path": "tests",
-      "kind": "tests",
-      "lifecycle": "active",
-      "deploy_root": false
-    },
-    {
-      "path": "examples",
-      "kind": "examples",
-      "lifecycle": "active",
-      "deploy_root": false
-    }
-  ]
+    ".github",
+    "docs",
+    "src",
+    "tests",
+    "examples"
+  ],
+  "allow_tracked": []
 }

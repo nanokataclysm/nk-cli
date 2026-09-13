@@ -1,148 +1,90 @@
-# Pre-publish audit — nk-cli v0.1
+# Public readiness review
 
-**Date:** 2026-07-18  
-**Auditor seat:** Mira (Grok)  
-**Tree:** `~/dev/nk-cli` (isolated from monorepo)  
-**Verdict:** **Ready for private operator review before first public repository create.**  
-**Not done until you OK:** create GitHub repo, push, PyPI publish.
+Updated 2026-09-13. This replaces the original extraction inventory with the
+current public interface. No publishing or deployment is part of this change.
 
----
+## Product scope
 
-## 1. Package identity (chosen)
+Six commands serve an ordinary developer checkout:
 
-| Field | Choice | Rationale |
-|-------|--------|-----------|
-| **Public name** | **`nk-cli`** | Distinct from private host CLI `nk` / `nanokat`; short; PyPI-friendly |
-| **Distribution name** | `nk-cli` (`pyproject.toml` project name) | Matches directory + console script |
-| **Import package** | `nk_cli` | PEP 8 |
-| **License** | **MIT** | Simple permissive OSS; SPDX `MIT` in `LICENSE` |
-| **Version** | `0.1.0` | Alpha utilities only |
+1. `analyze`: identify project metadata and suggest editable repository settings.
+2. `tools`: discover installed agent/runtime executables and explicit model preferences.
+3. `targets`: inspect Git, SSH, LAN, WAN, and Tailscale endpoint candidates.
+4. `boundaries`: check tracked artifacts, with optional explicit directory policy.
+5. `doctor`: test explicitly configured local TCP listeners.
+6. `reclaim`: inventory selected cache directories without deleting them.
 
----
+`portal-doctor` and existing manifest versions remain compatibility inputs.
+Runtime discovery uses local tools and explicit preferences. Modern service
+reports omit operator role/recovery data; legacy compatibility inputs remain supported.
+No private host inventory or required AI provider is needed. Adaptation uses
+repository metadata, installed executables, and editable `.nk-cli.json` preferences.
+Detected network/model inventories stay out of the shared profile.
 
-## 2. Candidate inventory & dependency / caller chains
+## Verified behavior
 
-### Runtime dependency graph (complete)
+The local unittest suite covers mixed Node/Python/Rust/Go repositories,
+CMake/Make suggestions, nested paths and linked worktrees, inherited package
+managers, ambiguous lockfiles, malformed metadata, profile preservation,
+profile use by all three checks, local-only probes, and reclaim exclusions,
+symlinks, depth boundaries, and partial sizes.
 
-```text
-nk-cli (console_scripts)
-  └─ nk_cli.cli:main
-       ├─ nk_cli.boundaries.run_boundaries
-       │    ├─ json (stdlib)
-       │    ├─ subprocess → git ls-files only
-       │    └─ pathlib
-       ├─ nk_cli.portal_doctor.{load_manifest,inspect}
-       │    ├─ json, re, socket (stdlib)
-       │    └─ pathlib
-       └─ nk_cli.reclaim.{scan,format_human,as_jsonable}
-            ├─ os, pathlib, dataclasses (stdlib)
-            └─ (no subprocess, no network)
-```
+Boundary enforcement now checks exact nested path prefixes and accepts simple
+unit names. Artifact exemptions allow deliberate fixtures. Reclaim no longer
+treats arbitrary build/dist directories as default candidates, follows symlink
+targets while sizing, or presents capped sizes as complete. Optional offline
+services no longer fail required service checks.
 
-| Module | External deps | Subprocess / network | Callers |
-|--------|---------------|----------------------|---------|
-| `cli.py` | **none** (stdlib + nk_cli) | none | `__main__`, entrypoint |
-| `boundaries.py` | **none** | `git ls-files` only | `cli boundaries` |
-| `portal_doctor.py` | **none** | **none** in v0.1 public (localhost `socket` only) | `cli portal-doctor` |
-| `reclaim.py` | **none** | none | `cli reclaim` |
+The implementation remains Python standard-library-only. The CI definition now
+covers Python 3.11/3.13 on Linux, macOS, and Windows, plus Python 3.14 on Linux.
+Local Linux execution is distinct from the scheduled CI matrix; unexecuted
+platform jobs are not evidence of compatibility.
 
-**Declared `project.dependencies`:** empty.  
-**Dev optional:** `pytest` (not required for `unittest` CI).  
-**Plugins:** none. No setuptools entry points beyond `nk-cli`.  
-**Scripts:** no shell helpers in this package.
+The discovery pass adds checks for repository PATH shims, relative repository
+paths, metadata time/output limits, explicit unavailable tool preferences,
+local-only model inventory, URL credential redaction, IPv6 parsing, Git push-URL
+precedence, passive neighbor/peer records, and bounded TCP probes. Obsolete
+owner-marker string guards were removed in favor of these behavioral tests.
 
-### Monorepo provenance (source, not linked)
+On 2026-09-13, all 86 local unit tests passed. A wheel built from an isolated
+source copy was installed without dependencies into a fresh virtual environment.
+The installed CLI passed an acceptance run in a separate Git fixture whose path
+contained spaces and an apostrophe. Relative repository selection, custom tool
+and model preferences, profile reuse, boundary checks, Git push-URL precedence,
+credential redaction, and a real loopback target probe passed. Profile overwrite
+was refused, all fixture source files retained their original hashes, and no
+agent or project scripts executed.
 
-| Public module | Derived from (private monorepo) | Extraction notes |
-|---------------|----------------------------------|------------------|
-| `boundaries` | `nkscripts/check-repository-boundaries.py` | Schema versions dual-accept; generic `.chroma` rule |
-| `portal_doctor` | `nkscripts/portal-doctor.py` | **Stripped** Tailscale + SSH + remote units for public v1 |
-| `reclaim` | patterns from disk-reclaim skill / reclaim_ops dry path | Report-only; blocks secret-ish path segments |
+Read-only Linux discovery also returned candidates from installed tools, the
+local Ollama catalog, Git remotes, cached LAN neighbors, and local Tailscale
+status. No remote target was probed, no inference ran, and no data was pushed.
+This proves the packaged local discovery flow; it does not establish build
+success, remote authentication, or push permission. The Tailscale CLI contract
+was checked against its [official reference](https://tailscale.com/docs/reference/tailscale-cli),
+which warns that the JSON format can change.
 
-No import of monorepo packages. No shared install.
+## Remaining limits
 
----
+- Analysis and boundary checks require a Git working tree. Reclaim and explicit
+  local port checks, tool inventory, and explicit/passive target discovery also
+  work outside Git.
+- Detection covers recognized metadata and literal task/port declarations, not
+  every build system, shell expression, workspace resolver, or framework default.
+- Generated directory rules are a top-level snapshot. Maintainers should narrow
+  them when architectural ownership requires finer boundaries.
+- Discovered tasks are suggestions only. There is no automatic dependency
+  installation or task execution, and analysis does not prove build/test success.
+- Tool-name heuristics do not establish agent capabilities. Explicit models are
+  unverified; automatic model listing currently supports local Ollama only.
+- Git target discovery reads literal local remote settings, not included/global
+  rewrites or SSH Host/ProxyJump configuration. WAN candidates must already be
+  configured or explicitly supplied. macOS/Windows neighbor discovery uses
+  cached IPv4 ARP only; Tailscale JSON can change between versions.
+- An online peer or successful TCP connection does not establish push access.
+  There is no push, file transfer, agent invocation, login, or deployment command.
+- Cache totals are estimates and never authorize deletion.
+- Package publication, remote CI results, and acceptance on another person's
+  workstation remain separate release gates.
 
-## 3. Per-command security review
-
-### `boundaries`
-
-| Check | Result |
-|-------|--------|
-| Secrets | Does not read env secrets; prints path strings from git only |
-| Host paths | Operator-supplied `--repo` / `--manifest` |
-| Destructive | Read-only validation; exit code 1 on errors |
-| Licensing | Original monorepo tool had no separate license; re-licensed under package MIT |
-
-### `portal-doctor`
-
-| Check | Result |
-|-------|--------|
-| Secrets | Rejects forbidden JSON keys (`token`, `password`, …) |
-| Host paths | Manifest path only; listeners **must** be `127.0.0.1` |
-| Network | Local TCP connect attempt only (no HTTP client) |
-| Destructive | Read-only |
-| Tailscale/SSH | **Rejected** in public v1 (manifest fields forbidden) |
-
-### `reclaim`
-
-| Check | Result |
-|-------|--------|
-| Secrets | Blocks scans under `.nanokat-secrets`, `.ssh`, `.gnupg`, `.aws`, `.config/gcloud` |
-| Destructive | **No delete API** — dry-run report only |
-| Host paths | Operator `--root` |
-
----
-
-## 4. Explicitly blocked from public v1
-
-These remain **private monorepo / operator** surfaces and must not be added without a separate redesign:
-
-- USB / LUKS / `nanokat-priv`
-- Secrets vault / rotate / crystal_castle
-- Ship / promote / Vercel / CF DNS set
-- Alley metal / PTY terminal bridge
-- Kai / Ollama bridge / Tailscale mesh control
-- Cloud backup / OCI recovery
-- Production-control commands
-
----
-
-## 5. Tests & CI
-
-| Item | Status |
-|------|--------|
-| Unit tests | `tests/` — boundaries, portal-doctor, reclaim |
-| Local run | `python -m unittest discover -s tests -v` |
-| CI | `.github/workflows/ci.yml` — Python 3.11–3.13, tests, CLI smoke, stdlib-only + forbidden-string guards |
-
----
-
-## 6. Final security review checklist (gate)
-
-- [x] Isolated tree (`~/dev/nk-cli`) with own tests  
-- [x] MIT LICENSE present  
-- [x] No third-party runtime deps  
-- [x] No Tailscale/SSH remote control in public v1 portal-doctor  
-- [x] No ship/secrets/LUKS/Alley/Kai code  
-- [x] CI workflow present  
-- [ ] **Operator:** create empty public GitHub repo (or confirm org name)  
-- [ ] **Operator:** SSH-signed tag + Sigstore/GitHub attestation on first release  
-- [ ] **Peer (Sylvia):** optional second-pass security review before `git push --tags`  
-- [ ] **Operator:** first publish decision (GitHub only vs GitHub + PyPI Trusted Publishing)  
-
----
-
-## 7. Recommended first publish steps (when approved)
-
-```bash
-cd ~/dev/nk-cli
-# after empty repo exists:
-# git remote add origin git@github.com:nanokataclysm/nk-cli.git
-# git push -u origin master
-# git tag -s v0.1.0 -m "nk-cli 0.1.0 public assistive utilities"
-# git push origin v0.1.0
-```
-
-Do **not** force-push monorepo history into this repo.  
-Do **not** copy monorepo secrets or `.env*` into CI.
+The [README](../README.md) documents setup, settings, and migration-compatible
+inputs. [SECURITY.md](../SECURITY.md) records the execution and filesystem scope.

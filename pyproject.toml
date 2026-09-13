@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nk-cli"
 version = "0.1.0"
-description = "Small public-safe assistive utilities extracted from NANOKAT practices"
+description = "Adaptive repository analysis, installed tool discovery, and push-target diagnostics"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "NANOKAT contributors" }]
-keywords = ["cli", "repository", "boundaries", "portal", "doctor", "disk"]
+keywords = ["cli", "repository", "analysis", "discovery", "network", "cache"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
@@ -20,6 +20,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = []
@@ -32,7 +33,6 @@ nk-cli = "nk_cli.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/nanokataclysm/nk-cli"
-# Remote is optional until first publish; local path is the source of truth.
 
 [tool.setuptools.packages.find]
 where = ["src"]

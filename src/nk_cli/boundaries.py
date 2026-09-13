@@ -1,60 +1,65 @@
-"""Validate a monorepo unit manifest and reject tracked runtime state.
-
-Compatible with NANOKAT-style manifests (`nanokat-repository-units/v1`) and the
-public schema (`nk-repository-units/v1`).
-"""
+"""Inspect any Git working tree, with optional explicit directory boundaries."""
 
 from __future__ import annotations
 
+from fnmatch import fnmatchcase
 import json
-import subprocess
 from pathlib import Path, PurePosixPath
+
+from nk_cli.repository import CONFIG_NAME, CONFIG_VERSION, load_profile, read_metadata, repository_files, repository_root
 
 SUPPORTED_VERSIONS = frozenset(
     {
+        CONFIG_VERSION,
         "nk-repository-units/v1",
         "nanokat-repository-units/v1",  # monorepo compatibility
     }
 )
-FORBIDDEN_PARTS = {"node_modules", ".next", ".vercel", "__pycache__"}
+FORBIDDEN_PARTS = {
+    "node_modules", ".next", ".vercel", "__pycache__", ".venv",
+    ".pytest_cache", ".mypy_cache", ".ruff_cache", ".turbo",
+}
 FORBIDDEN_SUFFIXES = (".tsbuildinfo", ".chroma")
 
 
 def tracked_files(repo: Path) -> list[str]:
-    result = subprocess.run(
-        ["git", "-C", str(repo), "ls-files", "-z"],
-        check=True,
-        capture_output=True,
-    )
-    return [item.decode() for item in result.stdout.split(b"\0") if item]
+    return repository_files(repo)
 
 
-def forbidden_tracked(paths: list[str]) -> list[str]:
+def forbidden_tracked(paths: list[str], allow_patterns: tuple[str, ...] = ()) -> list[str]:
     bad: list[str] = []
     for value in paths:
+        if any(fnmatchcase(value, pattern) for pattern in allow_patterns):
+            continue
         path = PurePosixPath(value)
         if FORBIDDEN_PARTS.intersection(path.parts):
             bad.append(value)
-        elif any(part.startswith(".venv") for part in path.parts):
-            bad.append(value)
         elif any(part.endswith(FORBIDDEN_SUFFIXES) for part in path.parts):
-            bad.append(value)
-        elif path.parts and path.parts[0].endswith(".chroma"):
             bad.append(value)
     return sorted(set(bad))
 
 
-def validate_manifest(repo: Path, manifest: object, tracked: list[str]) -> list[str]:
+def _relative_path(value: object) -> bool:
+    return (
+        isinstance(value, str) and bool(value) and "\\" not in value
+        and ":" not in value and "\0" not in value
+        and all(part not in {"", ".", ".."} for part in value.split("/"))
+    )
+
+
+def validate_manifest(
+    repo: Path, manifest: object, tracked: list[str], *, allow_patterns: tuple[str, ...] = (),
+) -> list[str]:
     errors: list[str] = []
     if not isinstance(manifest, dict):
         return ["manifest must be an object"]
 
-    if manifest.get("version") not in SUPPORTED_VERSIONS:
+    if not isinstance(manifest.get("version"), str) or manifest["version"] not in SUPPORTED_VERSIONS:
         errors.append("unsupported manifest version")
 
     root_files = manifest.get("root_files")
     if not isinstance(root_files, list) or not all(
-        isinstance(path, str) for path in root_files
+        _relative_path(path) and "/" not in path for path in root_files
     ):
         errors.append("root_files must be a list of filenames")
         root_files = []
@@ -66,16 +71,8 @@ def validate_manifest(repo: Path, manifest: object, tracked: list[str]) -> list[
     unit_paths: list[str] = []
     seen_paths: set[str] = set()
     for unit in units:
-        if not isinstance(unit, dict):
-            errors.append("every unit must be an object")
-            continue
-        path = unit.get("path")
-        if (
-            not isinstance(path, str)
-            or not path
-            or path.startswith("/")
-            or ".." in PurePosixPath(path).parts
-        ):
+        path = unit.get("path") if isinstance(unit, dict) else unit
+        if not _relative_path(path):
             errors.append(f"invalid unit path: {path!r}")
             continue
         if path in seen_paths:
@@ -83,56 +80,83 @@ def validate_manifest(repo: Path, manifest: object, tracked: list[str]) -> list[
         else:
             seen_paths.add(path)
             unit_paths.append(path)
-        if not (repo / path).exists():
+        resolved = (repo / path).resolve()
+        if not resolved.is_relative_to(repo.resolve()):
+            errors.append(f"manifest path leaves repository: {path}")
+        elif not resolved.is_dir():
             errors.append(f"manifest path does not exist: {path}")
-        if (
-            unit.get("kind") is None
-            or unit.get("lifecycle") is None
-            or not isinstance(unit.get("deploy_root"), bool)
-        ):
-            errors.append(f"unit metadata incomplete: {path}")
 
-    allowed_roots = {
-        PurePosixPath(path).parts[0]
-        for path in unit_paths
-        if isinstance(path, str) and path
-    }
     allowed_files = set(root_files)
     for value in tracked:
+        if any(value == path or value.startswith(path + "/") for path in unit_paths):
+            continue
         parts = PurePosixPath(value).parts
         if len(parts) == 1:
             if value not in allowed_files:
                 errors.append(f"unclassified root file: {value}")
-        elif parts[0] not in allowed_roots:
-            errors.append(f"unclassified root path: {parts[0]}")
+        else:
+            errors.append(f"unclassified tracked path: {value}")
 
-    package_units = {
-        path.parent.name
-        for path in repo.glob("*/package.json")
-        if not path.parent.name.startswith(".")
-    }
-    missing_packages = sorted(package_units - set(unit_paths))
-    errors.extend(f"package unit missing from manifest: {path}" for path in missing_packages)
-    errors.extend(f"forbidden tracked runtime/generated path: {path}" for path in forbidden_tracked(tracked))
+    allowed = manifest.get("allow_tracked", [])
+    if not isinstance(allowed, list) or not all(isinstance(p, str) and p for p in allowed):
+        errors.append("allow_tracked must be a list of nonempty glob patterns")
+        allowed = []
+    errors.extend(
+        f"forbidden tracked runtime/generated path: {path}"
+        for path in forbidden_tracked(tracked, (*allow_patterns, *allowed))
+    )
     return sorted(set(errors))
 
 
-def run_boundaries(repo: Path, manifest_path: Path) -> tuple[int, list[str]]:
-    repo = repo.resolve()
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return 2, ["manifest is not valid JSON"]
-    except (OSError, UnicodeDecodeError):
-        return 2, ["manifest cannot be read"]
+def boundary_report(
+    repo: Path, manifest_path: Path | None = None, *, allow_patterns: tuple[str, ...] = (),
+) -> tuple[int, dict]:
+    report = {"mode": "manifest" if manifest_path else "automatic", "errors": []}
+    manifest = None
+    if manifest_path is not None:
+        try:
+            manifest_path = manifest_path.expanduser().absolute()
+            manifest = json.loads(read_metadata(manifest_path.parent, manifest_path.name))
+        except json.JSONDecodeError:
+            report["errors"] = ["manifest is not valid JSON"]
+            return 2, report
+        except (OSError, ValueError, RuntimeError):
+            report["errors"] = ["manifest cannot be read"]
+            return 2, report
 
     try:
+        repo = repository_root(repo)
         tracked = tracked_files(repo)
-    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError):
-        return 2, ["repository tracked files cannot be read"]
+        if manifest_path is None:
+            manifest = load_profile(repo)
+            if manifest is not None:
+                report["mode"] = CONFIG_NAME
+    except ValueError as exc:
+        report["errors"] = [str(exc)]
+        return 2, report
 
-    errors = validate_manifest(repo, manifest, tracked)
-    if errors:
-        return 1, errors
-    units = manifest.get("units") if isinstance(manifest, dict) else []
-    return 0, [f"repository-boundaries: clean ({len(units)} units)"]
+    report.update(
+        repo=str(repo), tracked_files=len(tracked),
+        root_files=[path for path in tracked if "/" not in path],
+        units=sorted({path.split("/")[0] for path in tracked if "/" in path}),
+    )
+    if manifest is not None or manifest_path is not None:
+        try:
+            errors = validate_manifest(repo, manifest, tracked, allow_patterns=allow_patterns)
+        except (OSError, RuntimeError):
+            report["errors"] = ["manifest paths cannot be resolved"]
+            return 2, report
+    else:
+        errors = [f"forbidden tracked runtime/generated path: {path}"
+                  for path in forbidden_tracked(tracked, allow_patterns)]
+    report["errors"] = errors
+    return (1 if errors else 0), report
+
+
+def run_boundaries(
+    repo: Path, manifest_path: Path | None = None, *, allow_patterns: tuple[str, ...] = (),
+) -> tuple[int, list[str]]:
+    code, report = boundary_report(repo, manifest_path, allow_patterns=allow_patterns)
+    return code, report["errors"] or [
+        f"repository-boundaries: clean ({report['tracked_files']} tracked files; {report['mode']} mode)",
+    ]

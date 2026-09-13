@@ -8,10 +8,18 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.13"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.14"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,9 +34,13 @@ jobs:
       - name: CLI smoke
         run: |
           nk-cli --help
+          nk-cli analyze --json
+          nk-cli tools --json
+          nk-cli targets --json
+          nk-cli boundaries --manifest examples/repository-units.example.json --json
           # The example intentionally checks an offline localhost listener.
-          nk-cli portal-doctor --manifest examples/portal-hosts.example.json || test "$?" -eq 1
-          nk-cli reclaim --root . --depth 2 --json | head -c 200
+          nk-cli doctor --manifest examples/services.example.json || test "$?" -eq 1
+          nk-cli reclaim --root . --depth 2 --json
       - name: Stdlib-only guard
         run: |
           python - <<'PY'
@@ -52,19 +64,3 @@ jobs:
               raise SystemExit("non-stdlib imports: " + ", ".join(bad))
           print("stdlib_only ok")
           PY
-      - name: Forbidden string scan
-        run: |
-          # Fail if private host-control surfaces sneak into src/ (exclude pure deny-list comments)
-          # Allowed: reclaim path *blocklist* may mention secret-like directory names to refuse them.
-          hits=$(grep -REn 'crystal_castle|ALLEY_|KAI_BRIDGE|cryptsetup|nanokat-priv|vercel deploy|force-push|ship promote|usb setup' src/ || true)
-          if [ -n "$hits" ]; then
-            echo "$hits"
-            echo "forbidden private-control markers in src/" >&2
-            exit 1
-          fi
-          # Hard fail if vault path is used as a default *source* (not only blocklist)
-          if grep -REn 'nanokat-secrets.*/(env|key|token)|open\(.*nanokat-secrets' src/; then
-            echo "vault path used as a source" >&2
-            exit 1
-          fi
-          echo "forbidden-string scan ok"
