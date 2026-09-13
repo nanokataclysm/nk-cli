@@ -282,7 +282,7 @@ def _probe(endpoint: dict) -> dict:
         return {"reachability": "unresolved", "resolved_addresses": []}
     addresses = sorted({row[1][0] for row in resolved})
     for family, sockaddr in resolved:
-        remaining = deadline - time.monotonic()
+        remaining = min(PROBE_TIMEOUT, deadline - time.monotonic())
         if remaining <= 0:
             break
         try:

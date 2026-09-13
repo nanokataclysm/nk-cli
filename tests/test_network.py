@@ -180,7 +180,9 @@ class NetworkTests(unittest.TestCase):
         connection = Mock()
         connection.__enter__ = Mock(return_value=connection)
         connection.__exit__ = Mock(return_value=False)
-        with patch("nk_cli.network._resolve_host", return_value=[(socket.AF_INET, ("192.168.1.2", 2222))]), patch("nk_cli.network.socket.socket", return_value=connection):
+        # A large fixed monotonic value reproduces floating-point subtraction
+        # rounding above 0.6 seconds on Windows and other platforms.
+        with patch("nk_cli.network.time.monotonic", return_value=10000.0), patch("nk_cli.network._resolve_host", return_value=[(socket.AF_INET, ("192.168.1.2", 2222))]), patch("nk_cli.network.socket.socket", return_value=connection):
             report = discover_targets(None, targets=("host.example:2222",), probe=True)
         target = report["targets"][0]
         self.assertEqual("reachable", target["reachability"])
