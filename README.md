@@ -3,6 +3,7 @@
 Repository analysis, installed tool discovery, push-target candidates, and local checks.
 Works with single projects and monorepos. Requires Python 3.11+ and Git;
 there are no third-party Python runtime dependencies.
+The same Python package supports Linux, macOS, and Windows.
 
 ## Start with your repository
 
@@ -69,6 +70,15 @@ login, or credential inspection occurs.
 when `python` is absent. Missing tools remain labeled; declared package managers
 are not silently replaced. Executable presence does not prove dependencies are
 installed or the suggested task will succeed.
+
+Task suggestions use POSIX shell syntax on Linux/macOS and PowerShell syntax on
+Windows, including quoted executable paths and npm-style `.cmd` launchers.
+Use `analyze --shell posix` in Git Bash or `--shell powershell` to choose explicitly.
+`--json` always retains argument arrays. Arguments that older PowerShell/native
+binding cannot preserve are shown as JSON rather than an inaccurate shell command.
+Windows discovery follows supported `PATHEXT` entries and skips extensionless
+POSIX shims. `.cmd`/`.bat` agents can be inventoried, but metadata probes require
+native `.exe`/`.com` tools.
 
 Only explicit/saved tool preferences enter `.nk-cli.json` under
 `"tooling": {"agents": ["my-agent"], "models": ["my-model"]}`. Detected absolute
@@ -216,21 +226,34 @@ Saved `cache_names` add repository-specific candidates.
 Depth limits candidate discovery: depth 1 includes immediate children. Sizing
 then examines regular-file metadata within each candidate, up to `--max-files`.
 An explicitly selected scan root that is itself a candidate is measured too.
-Symlinks inside the scan, Git internals, and protected credential directories are
-skipped. Size caps, unreadable entries, and omitted subtrees yield
+Symlinks, Windows junctions/other reparse points inside the scan, Git internals,
+and protected credential directories are skipped. This also skips cloud-file
+placeholders rather than causing a download. Size caps, unreadable entries, and omitted subtrees yield
 `size_complete: false`, also labeled in human output. Sizes are logical bytes,
 not guaranteed reclaimable disk blocks. No delete/apply command exists.
 
 ## Install from a checkout
 
+Linux/macOS (with Python 3.11+ available as `python3`):
+
 ```sh
-python -m venv .venv
-# POSIX shells:
-. .venv/bin/activate
-# Windows PowerShell instead: .venv\Scripts\Activate.ps1
-python -m pip install .
-nk-cli --help
+python3 -m venv .venv
+.venv/bin/python -m pip install .
+.venv/bin/nk-cli --help
 ```
+
+Windows PowerShell (with Python 3.11+ available as `python`):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install .
+.\.venv\Scripts\nk-cli.exe --help
+```
+
+These commands do not require virtual-environment activation or changing
+PowerShell execution policy. Activate the environment or add its executable
+directory to your PATH if you want to use the shorter `nk-cli` command elsewhere.
+Git must also be on PATH; Tailscale and Ollama are optional discovery tools.
 
 For development, install with `python -m pip install -e .` and run
 `python -m unittest discover -s tests -v`. The optional `[dev]` extra adds pytest

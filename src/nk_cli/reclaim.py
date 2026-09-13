@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import stat
 
+from nk_cli.paths import is_link_or_reparse, is_link_stat
+
 
 # Relative path fragments that are usually safe reclaim *candidates* for reporting.
 CANDIDATE_NAMES = frozenset(
@@ -75,7 +77,11 @@ def _dir_size(path: Path, root: Path, patterns: tuple[str, ...], *, max_files: i
         keep = []
         for name in dirs:
             child = current / name
-            if child.is_symlink() or name == ".git" or _is_blocked(child) or _excluded(child, root, patterns):
+            try:
+                skip = is_link_or_reparse(child) or _is_blocked(child) or _excluded(child, root, patterns)
+            except OSError:
+                skip = True
+            if skip:
                 complete = False
             else:
                 keep.append(name)
@@ -90,7 +96,7 @@ def _dir_size(path: Path, root: Path, patterns: tuple[str, ...], *, max_files: i
                 continue
             try:
                 info = child.lstat()
-                if not stat.S_ISREG(info.st_mode):
+                if is_link_stat(info) or not stat.S_ISREG(info.st_mode):
                     complete = False
                     continue
                 identity = (info.st_dev, info.st_ino)
@@ -154,7 +160,7 @@ def scan(
         keep: list[str] = []
         for name in list(dirnames):
             child = current / name
-            if child.is_symlink() or _is_blocked(child) or _excluded(child, exclude_base, exclude_paths):
+            if is_link_or_reparse(child) or _is_blocked(child) or _excluded(child, exclude_base, exclude_paths):
                 continue
             if name in names:
                 add(child)

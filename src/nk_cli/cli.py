@@ -6,7 +6,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-import shlex
 
 from nk_cli import __version__
 from nk_cli.analyze import analyze_repository, write_profile
@@ -16,6 +15,7 @@ from nk_cli.network import discover_targets
 from nk_cli.portal_doctor import inspect, load_manifest
 from nk_cli.reclaim import as_jsonable, format_human, scan
 from nk_cli.repository import CONFIG_NAME, load_profile, repository_root
+from nk_cli.shell import command_shell, format_command
 from nk_cli.tooling import discover_tools, validate_tooling_profile
 
 
@@ -66,6 +66,7 @@ def _print_targets(report: dict) -> None:
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
     report = analyze_repository(args.repo)
+    report["command_shell"] = command_shell(args.shell)
     repo = Path(report["repo"])
     profile = load_profile(repo) or {}
     report["tooling"] = _tools_for(args, repo, profile)
@@ -91,11 +92,16 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         print(json.dumps(report, indent=2))
     else:
         print(f"Repository: {report['repo']}")
+        print(f"Task suggestions use {report['command_shell']} syntax.")
         for project in report["projects"]:
             print(f"\n{project['path']} — {', '.join(project['ecosystems'])}")
             for task in project["tasks"]:
                 available = "executable found" if task["executable_available"] else "executable missing"
-                print(f"  {task['name']}: {shlex.join(task['command'])} [{task['source']}; {available}]")
+                try:
+                    command = format_command(task["command"], shell=report["command_shell"])
+                except ValueError:
+                    command = "JSON arguments (not a shell command): " + json.dumps(task["command"])
+                print(f"  {task['name']}: {command} [{task['source']}; {available}]")
         if not report["projects"]:
             print("No supported project manifests found; boundary and cache checks still work.")
         for warning in report["warnings"]:
@@ -221,6 +227,7 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--repo", type=Path, default=Path.cwd(), help="repository or subdirectory (default: current directory; discovers Git root)")
     a.add_argument("--write-config", action="store_true", help="create .nk-cli.json; never overwrites")
     a.add_argument("--json", action="store_true", help="machine-readable analysis and suggested configuration")
+    a.add_argument("--shell", choices=["auto", "posix", "powershell"], default="auto", help="task suggestion syntax (default: PowerShell on Windows, POSIX elsewhere)")
     _tool_options(a)
     _target_options(a)
     a.set_defaults(func=_cmd_analyze)

@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from nk_cli.discovery import executable_on_path, run_metadata_command
+from nk_cli.discovery import executable_at_path, executable_on_path, run_metadata_command
 
 
 KNOWN_TOOLS = (
@@ -86,8 +86,9 @@ def _path_names(repo: Path | None, warnings: list[str]) -> set[str]:
                     remaining -= 1
                     name = entry.name
                     if os.name == "nt":
+                        name = name.lower()
                         for suffix in (".exe", ".cmd", ".bat", ".com"):
-                            if name.lower().endswith(suffix):
+                            if name.endswith(suffix):
                                 name = name[:-len(suffix)]
                                 break
                     if (len(name) <= 512 and name.isprintable() and name.lower() not in _SYSTEM_HELPERS
@@ -105,11 +106,7 @@ def _selected_executable(selector: str, repo: Path | None) -> str | None:
     path = Path(selector).expanduser()
     if not path.is_absolute():
         path = (repo if repo is not None else Path.cwd()) / path
-    try:
-        path = path.resolve()
-        return str(path) if path.is_file() and os.access(path, os.X_OK) else None
-    except (OSError, RuntimeError):
-        return None
+    return executable_at_path(path)
 
 
 def _ollama_names(output: bytes) -> list[str]:

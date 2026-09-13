@@ -177,9 +177,11 @@ def _lan_targets(repo: Path | None, warnings: list[str]) -> list[dict]:
                 raise ValueError("invalid neighbor data")
             values = [row.get("dst") for row in rows if isinstance(row, dict)]
         elif system in {"Darwin", "Windows"}:
-            output = _command("arp", ["-an"] if system == "Darwin" else ["-a"], repo).decode("utf-8")
-            pattern = r"\((\d{1,3}(?:\.\d{1,3}){3})\)" if system == "Darwin" else r"^\s*(\d{1,3}(?:\.\d{1,3}){3})\s"
-            values = re.findall(pattern, output, re.MULTILINE)
+            output = _command("arp", ["-an"] if system == "Darwin" else ["-a"], repo)
+            # Native ARP headers can use a localized/OEM encoding; IPv4 fields
+            # remain ASCII, so do not decode the surrounding text at all.
+            pattern = rb"\((\d{1,3}(?:\.\d{1,3}){3})\)" if system == "Darwin" else rb"^\s*(\d{1,3}(?:\.\d{1,3}){3})\s"
+            values = [value.decode("ascii") for value in re.findall(pattern, output, re.MULTILINE)]
             warnings.append("LAN discovery on this platform reads cached IPv4 ARP neighbors only.")
         else:
             warnings.append("Passive LAN discovery is unavailable on this platform.")

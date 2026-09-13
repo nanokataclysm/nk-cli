@@ -148,6 +148,15 @@ class NetworkTests(unittest.TestCase):
         self.assertTrue(all(row["reachability"] == "not-probed" for row in report["targets"]))
         self.assertNotIn("private", json.dumps(report))
 
+    def test_localized_arp_headers_do_not_hide_ascii_neighbor_addresses(self):
+        cases = [("Windows", b"Interface: 192.168.1.1 --- 0x5\r\nAdresse r\x82seau\r\n 192.168.1.3 aa-bb-cc-dd-ee-ff dynamique\r\n"),
+                 ("Darwin", b"h\xf4te (192.168.1.3) at aa:bb:cc:dd:ee:ff on en0\n")]
+        for system, output in cases:
+            with self.subTest(system=system), patch("nk_cli.network.platform.system", return_value=system), patch("nk_cli.network._command", return_value=output):
+                report = discover_targets(None, lan=True)
+                self.assertEqual(["192.168.1.3"], [target["host"] for target in report["targets"]])
+                self.assertTrue(all(target["reachability"] == "not-probed" for target in report["targets"]))
+
     def test_malformed_network_metadata_keeps_other_results(self):
         for value in (b"not json", b"[]", b'{"Peer": []}'):
             with self.subTest(value=value), patch("nk_cli.network._command", return_value=value):

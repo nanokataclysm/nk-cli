@@ -86,7 +86,7 @@ class BoundariesTests(unittest.TestCase):
         subprocess.run(["git", "-C", str(root), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                         "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], check=True, env=env)
         with tempfile.TemporaryDirectory() as temp:
-            worktree = Path(temp) / "linked"
+            worktree = Path(temp).resolve() / "linked"
             subprocess.run(["git", "-C", str(root), "worktree", "add", "--detach", "-q", str(worktree)], check=True, env=env)
             code, report = boundary_report(worktree / "src")
             self.assertEqual(0, code)

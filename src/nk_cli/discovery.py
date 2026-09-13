@@ -10,6 +10,39 @@ import tempfile
 import threading
 
 
+_WINDOWS = os.name == "nt"
+_WINDOWS_SUFFIXES = (".com", ".exe", ".bat", ".cmd")
+
+
+def _executable_names(name: str) -> tuple[str, ...]:
+    """Expand Windows launchers without accepting extensionless POSIX shims."""
+    if not _WINDOWS:
+        return (name,)
+    if Path(name).suffix.lower() in _WINDOWS_SUFFIXES:
+        return (name,)
+    # PATHEXT can contain arbitrary file associations, paths, or empty entries.
+    # Only native programs and the batch launchers we inventory are supported.
+    raw_extensions = os.environ.get("PATHEXT", ";".join(_WINDOWS_SUFFIXES))
+    extensions = dict.fromkeys(
+        extension.strip().lower()
+        for extension in raw_extensions[:2048].split(";")[:64]
+        if extension.strip().lower() in _WINDOWS_SUFFIXES
+    )
+    return tuple(name + extension for extension in extensions)
+
+
+def executable_at_path(path: Path) -> str | None:
+    """Resolve an explicitly selected path using the platform's launcher rules."""
+    for name in _executable_names(path.name):
+        try:
+            candidate = path.with_name(name).resolve()
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+        except (OSError, RuntimeError):
+            continue
+    return None
+
+
 def executable_on_path(name: str, *, repo: Path | None = None) -> str | None:
     """Find a command without implicit cwd lookup or repository PATH shims."""
     if not name or Path(name).name != name or "/" in name or "\\" in name:
@@ -22,9 +55,6 @@ def executable_on_path(name: str, *, repo: Path | None = None) -> str | None:
             if (parent / ".git").exists():
                 excluded.add(parent)
                 break
-    extensions = [""]
-    if os.name == "nt":
-        extensions += os.environ.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(os.pathsep)
     for entry in os.environ.get("PATH", "").split(os.pathsep)[:128]:
         directory = Path(entry)
         if not entry or not directory.is_absolute():
@@ -33,8 +63,8 @@ def executable_on_path(name: str, *, repo: Path | None = None) -> str | None:
             directory = directory.resolve()
             if any(directory.is_relative_to(root) for root in excluded):
                 continue
-            for extension in extensions:
-                candidate = directory / (name + extension)
+            for filename in _executable_names(name):
+                candidate = directory / filename
                 resolved = candidate.resolve()
                 if any(resolved.is_relative_to(root) for root in excluded):
                     continue
@@ -54,11 +84,15 @@ def run_metadata_command(
     if (not argv or not all(isinstance(arg, str) and arg and "\x00" not in arg for arg in argv)
             or timeout <= 0 or max_bytes <= 0):
         raise ValueError("invalid metadata command or limits")
+    if _WINDOWS and Path(argv[0]).suffix.lower() not in {".exe", ".com"}:
+        # Windows may dispatch batch files through cmd.exe even with shell=False.
+        # Discovery can report those launchers, but metadata probes never run them.
+        raise ValueError("metadata command requires a native Windows executable")
     try:
         process = subprocess.Popen(
             argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, cwd=cwd or tempfile.gettempdir(), env=env,
-            start_new_session=os.name != "nt",
+            start_new_session=not _WINDOWS,
         )
     except OSError as exc:
         raise ValueError("metadata command could not start") from exc
@@ -69,7 +103,7 @@ def run_metadata_command(
 
     def stop() -> None:
         try:
-            if os.name != "nt":
+            if not _WINDOWS:
                 os.killpg(process.pid, signal.SIGKILL)
             else:
                 process.kill()

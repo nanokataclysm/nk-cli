@@ -10,7 +10,7 @@ overwrite an existing file or symlink.
 
 Repository manifests are untrusted data. Analysis reads recognized regular
 metadata files, limited to 1 MiB each and 1,000 candidates. It rejects symlinked
-metadata and protected paths. Git's filesystem monitor is disabled for inspection;
+metadata, Windows junctions/other reparse points, and protected paths. Git's filesystem monitor is disabled for inspection;
 ambient Git variables cannot redirect the selected repository. Automatic command
 lookup skips relative PATH entries and executables inside the selected working
 tree. Git inspection uses an absolute executable and a normalized repository
@@ -27,6 +27,7 @@ Modern doctor output contains service data; operator role/recovery fields remain
 only in the legacy alias output.
 
 Tool discovery does not launch discovered agents or inspect their credentials.
+Windows batch launchers are inventoried but never run by metadata probes.
 Explicit executable paths are inventoried without execution. Model IDs are
 unverified preferences. Opt-in `--list-models` launches the installed Ollama
 metadata command against fixed loopback, overriding remote endpoint/proxy
@@ -47,8 +48,8 @@ an OS resolver thread can finish later. At most 128 candidates are reported.
 No credentials or application payloads are sent. Reachability never establishes
 push permission, trusted host identity, or a valid destination directory.
 
-Reclaim reads file metadata, not file contents. It skips Git internals, symlinks
-within the scan, and recognized credential directories. An explicitly supplied
+Reclaim reads file metadata, not file contents. It skips Git internals, recognized
+credential directories, and symlinks/Windows reparse points within the scan. An explicitly supplied
 root is resolved before inspection. Reports are estimates, may race with ordinary
 filesystem changes, and are not a guarantee that a directory can be deleted safely.
 This CLI is not a sandbox against a hostile process changing the filesystem under

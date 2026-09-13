@@ -8,6 +8,7 @@ from pathlib import Path
 import stat
 
 from nk_cli.discovery import executable_on_path, run_metadata_command
+from nk_cli.paths import is_link_stat
 from nk_cli.reclaim import _is_blocked
 
 CONFIG_NAME = ".nk-cli.json"
@@ -46,14 +47,23 @@ def repository_files(repo: Path, *, untracked: bool = False) -> list[str]:
 
 
 def read_metadata(repo: Path, relative: str) -> str:
-    path = repo / relative
-    if _is_blocked(path.absolute()):
-        raise ValueError(f"protected metadata path: {relative}")
-    if not path.resolve().is_relative_to(repo.resolve()):
+    # Resolve only the explicitly selected root first. System aliases such as
+    # macOS /var -> /private/var are not repository-controlled metadata links.
+    repo = repo.expanduser().resolve()
+    relative_path = Path(relative)
+    if relative_path.anchor or ".." in relative_path.parts:
         raise ValueError(f"metadata leaves repository: {relative}")
-    if any(part.is_symlink() for part in (path, *path.parents) if part != repo and repo in part.parents):
-        raise ValueError(f"symlinked metadata is not read: {relative}")
-    if not stat.S_ISREG(path.lstat().st_mode):
+    path = repo / relative_path
+    if _is_blocked(path):
+        raise ValueError(f"protected metadata path: {relative}")
+    current = repo
+    info = repo.lstat()
+    for part in relative_path.parts:
+        current /= part
+        info = current.lstat()
+        if is_link_stat(info):
+            raise ValueError(f"linked or reparse-point metadata is not read: {relative}")
+    if not stat.S_ISREG(info.st_mode):
         raise ValueError(f"metadata is not a regular file: {relative}")
     with path.open("rb") as source:
         content = source.read(METADATA_LIMIT + 1)
@@ -64,7 +74,9 @@ def read_metadata(repo: Path, relative: str) -> str:
 
 def load_profile(repo: Path) -> dict | None:
     path = repo / CONFIG_NAME
-    if not path.exists() and not path.is_symlink():
+    try:
+        path.lstat()
+    except FileNotFoundError:
         return None
     try:
         profile = json.loads(read_metadata(repo, CONFIG_NAME))

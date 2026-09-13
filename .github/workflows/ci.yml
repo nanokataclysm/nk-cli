@@ -31,6 +31,12 @@ jobs:
           pip install -e '.[dev]'
       - name: Unit tests
         run: python -m unittest discover -s tests -v
+      - name: Build and install wheel
+        run: |
+          python -m pip wheel --no-deps . --wheel-dir "${{ runner.temp }}/nk-cli-wheel"
+          python -m pip install --no-index --no-deps --force-reinstall "${{ runner.temp }}"/nk-cli-wheel/*.whl
+      - name: Installed CLI smoke
+        run: python tests/installed_smoke.py
       - name: CLI smoke
         run: |
           nk-cli --help
@@ -41,6 +47,14 @@ jobs:
           # The example intentionally checks an offline localhost listener.
           nk-cli doctor --manifest examples/services.example.json || test "$?" -eq 1
           nk-cli reclaim --root . --depth 2 --json
+      - name: Native PowerShell smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $report = nk-cli analyze --repo . --shell powershell --json | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $report.command_shell -ne 'powershell') { throw 'PowerShell analysis failed' }
+          nk-cli analyze --repo . --shell powershell
+          if ($LASTEXITCODE -ne 0) { throw 'PowerShell text output failed' }
       - name: Stdlib-only guard
         run: |
           python - <<'PY'

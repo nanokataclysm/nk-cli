@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from nk_cli.reclaim import scan
 
@@ -86,6 +87,20 @@ class ReclaimTests(unittest.TestCase):
             for options in [{"max_depth": -1}, {"max_files": 0}, {"include_names": ("../outside",)}, {"include_names": (".ssh",)}]:
                 with self.subTest(options=options), self.assertRaises(ValueError):
                     scan(Path(tmp), **options)
+
+    def test_unreadable_entries_fail_discovery_but_make_cache_sizes_partial(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cache = root / "node_modules"
+            (cache / "inaccessible").mkdir(parents=True)
+            (cache / "local").write_bytes(b"123")
+            with patch("nk_cli.reclaim.is_link_or_reparse", side_effect=PermissionError("denied")):
+                with self.assertRaises(PermissionError):
+                    scan(root)
+                found = scan(cache)
+            self.assertEqual(1, len(found))
+            self.assertEqual(3, found[0].size_bytes)
+            self.assertFalse(found[0].size_complete)
 
 
 if __name__ == "__main__":

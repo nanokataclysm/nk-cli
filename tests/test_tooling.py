@@ -11,7 +11,7 @@ class ToolingTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
-        self.root = Path(self.directory.name)
+        self.root = Path(self.directory.name).resolve()
         self.repo = self.root / "repo"
         self.repo.mkdir()
         (self.repo / ".git").mkdir()
@@ -22,6 +22,8 @@ class ToolingTests(unittest.TestCase):
         self.addCleanup(self.environment.stop)
 
     def executable(self, name, directory=None):
+        if os.name == "nt" and not Path(name).suffix:
+            name += ".exe"
         path = (directory or self.bin) / name
         path.write_text("#!/bin/sh\nexit 77\n", encoding="utf-8")
         path.chmod(0o755)
@@ -67,6 +69,28 @@ class ToolingTests(unittest.TestCase):
         report = discover_tools(self.repo, agents=("./my scripts/assistant",))
         self.assertEqual(str(path), report["agents"][0]["executable"])
         self.assertTrue(report["agents"][0]["available"])
+
+    def test_explicit_suffixed_path_with_spaces_is_preserved(self):
+        local_bin = self.repo / "my scripts"
+        local_bin.mkdir()
+        path = self.executable("custom helper.cmd", local_bin)
+        report = discover_tools(self.repo, agents=(str(path),))
+        self.assertEqual(str(path), report["agents"][0]["executable"])
+        self.assertEqual([str(path)], report["selected_agents"])
+
+    def test_windows_explicit_path_uses_cmd_sibling_and_rejects_bare_shim(self):
+        local_bin = self.repo / "my scripts"
+        local_bin.mkdir()
+        shim = local_bin / "helper"
+        shim.write_text("must not execute")
+        shim.chmod(0o755)
+        path = self.executable("helper.cmd", local_bin)
+        with patch("nk_cli.discovery._WINDOWS", True), patch.dict(os.environ, {"PATHEXT": ".EXE;.CMD"}):
+            report = discover_tools(self.repo, agents=("./my scripts/helper",))
+            self.assertEqual(str(path), report["agents"][0]["executable"])
+            path.unlink()
+            report = discover_tools(self.repo, agents=("./my scripts/helper",))
+            self.assertFalse(report["agents"][0]["available"])
 
     def test_repo_and_relative_path_entries_are_not_automatically_used(self):
         local_bin = self.repo / "bin"

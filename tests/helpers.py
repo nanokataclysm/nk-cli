@@ -7,7 +7,7 @@ import tempfile
 def fixture_repo(test, files):
     temporary = tempfile.TemporaryDirectory()
     test.addCleanup(temporary.cleanup)
-    root = Path(temporary.name)
+    root = Path(temporary.name).resolve()
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull)
     subprocess.run(["git", "-c", "init.templateDir=", "init", "-q", str(root)], check=True, env=env)
