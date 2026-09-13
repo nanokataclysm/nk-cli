@@ -35,10 +35,26 @@ treats arbitrary build/dist directories as default candidates, follows symlink
 targets while sizing, or presents capped sizes as complete. Optional offline
 services no longer fail required service checks.
 
-The implementation remains Python standard-library-only. The CI definition now
-covers Python 3.11/3.13 on Linux, macOS, and Windows, plus Python 3.14 on Linux.
-Local Linux execution is distinct from the scheduled CI matrix; unexecuted
-platform jobs are not evidence of compatibility.
+The implementation remains Python standard-library-only. CI covers Python
+3.11/3.13 on Linux, macOS, and Windows, plus Python 3.14 on Linux. Every job
+runs unit tests, builds and installs a wheel, and exercises the installed CLI
+against a disposable repository with Unicode, spaces, and an apostrophe in its
+path. The acceptance flow checks profile reuse, custom tools/models, boundaries,
+cache inventory, and real loopback TCP probes. Windows also runs native
+PowerShell and NTFS junction fixtures. See the
+[CI workflow results](https://github.com/nanokataclysm/nk-cli/actions/workflows/ci.yml)
+for the current platform gates; fixture/CI acceptance does not establish live
+provider or remote deployment access.
+
+The portability pass resolves macOS and Windows path aliases, follows supported
+Windows PATHEXT entries instead of extensionless POSIX shims, and renders task
+suggestions for PowerShell or POSIX shells. Nonportable native arguments retain
+their JSON form. Metadata subprocesses require native Windows executable files;
+batch agents remain inventory-only. Cached ARP parsing extracts ASCII address
+fields independently of localized headers. File readers and reclaim scans reject
+nested Windows reparse points, including junctions and cloud placeholders.
+The local suite ran 107 tests: 101 passed and six Windows-only cases run in CI.
+A fresh Linux wheel installation passed the installed CLI acceptance flow.
 
 The discovery pass adds checks for repository PATH shims, relative repository
 paths, metadata time/output limits, explicit unavailable tool preferences,
@@ -46,7 +62,8 @@ local-only model inventory, URL credential redaction, IPv6 parsing, Git push-URL
 precedence, passive neighbor/peer records, and bounded TCP probes. Obsolete
 owner-marker string guards were removed in favor of these behavioral tests.
 
-On 2026-09-13, all 86 local unit tests passed. A wheel built from an isolated
+The initial Linux discovery baseline on 2026-09-13 passed all 86 then-current
+unit tests. A wheel built from an isolated
 source copy was installed without dependencies into a fresh virtual environment.
 The installed CLI passed an acceptance run in a separate Git fixture whose path
 contained spaces and an apostrophe. Relative repository selection, custom tool
@@ -83,8 +100,8 @@ which warns that the JSON format can change.
 - An online peer or successful TCP connection does not establish push access.
   There is no push, file transfer, agent invocation, login, or deployment command.
 - Cache totals are estimates and never authorize deletion.
-- Package publication, remote CI results, and acceptance on another person's
-  workstation remain separate release gates.
+- Package publication and acceptance on a user's own workstation remain separate
+  release gates; CI covers hosted platform runners and fictional local fixtures.
 
 The [README](../README.md) documents setup, settings, and migration-compatible
 inputs. [SECURITY.md](../SECURITY.md) records the execution and filesystem scope.
